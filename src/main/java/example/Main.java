@@ -12,6 +12,7 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.sql.*;
+import java.util.ArrayList;
 import java.util.Properties;
 
 public class Main extends HttpServlet{
@@ -41,6 +42,15 @@ public class Main extends HttpServlet{
 
             String dogUrl = dogResponse.getMessage();
 
+            ArrayList<String> comments;
+            try {
+                comments = getComments(dogUrl);
+            } catch (ClassNotFoundException e) {
+                throw new RuntimeException(e);
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+            request.setAttribute("comments", comments);
             request.setAttribute("dogUrl", dogUrl);
             request.getRequestDispatcher("/home.jsp").forward(request, response);
 
@@ -83,30 +93,82 @@ public class Main extends HttpServlet{
         Class.forName("org.postgresql.Driver");
         Connection cn = DriverManager.getConnection(urlD, login, password);
         Statement stmt = cn.createStatement();
+
+        //первая табличка с собакой
         String Selectprep = "SELECT * FROM dogs WHERE url = ?";
         PreparedStatement select = cn.prepareStatement(Selectprep);
         select.setString(1, url);
         ResultSet rs = select.executeQuery();
+
+        int id;
         if (!rs.next()){
             String Insertprep = "INSERT INTO dogs(url, liked) VALUES(?, ?)";
-            PreparedStatement insert = cn.prepareStatement(Insertprep);
+            PreparedStatement insert = cn.prepareStatement(Insertprep,  Statement.RETURN_GENERATED_KEYS);
             insert.setString(1, url);
             insert.setBoolean(2, liked);
             insert.executeUpdate();
+            ResultSet rsInsert = insert.getGeneratedKeys();
+            rsInsert.next();
+            id = rsInsert.getInt("id");
+
+            rsInsert.close();
             insert.close();
             System.out.println("Задача успешно добавлена!");
         }
-        else if(rs.next()){
+        else{
             String Updateprep = "UPDATE dogs SET liked = ? WHERE url = ?";
             PreparedStatement update = cn.prepareStatement(Updateprep);
             update.setBoolean(1, liked);
             update.setString(2, url);
             update.executeUpdate();
+            id = rs.getInt("id");
             update.close();
             System.out.println("обновление записи");
         }
+
+
         rs.close();
+        //вторая табличка с комментариями к собаке
+
+        String Insertprep = "INSERT INTO dog_comments(dog_id, comment) VALUES (?, ?)";
+        PreparedStatement insert = cn.prepareStatement(Insertprep);
+
+        insert.setInt(1, id);
+        insert.setString(2, message);
+        insert.executeUpdate();
+        System.out.println("Комментарий добавлен");
+        insert.close();
         stmt.close();
         cn.close();
+    }
+
+    private ArrayList<String> getComments(String url) throws ClassNotFoundException, SQLException {
+        ArrayList<String> comments = new ArrayList<>();
+        Properties props = new Properties();
+        try(InputStream in = getClass().getClassLoader().getResourceAsStream("config.properties")){
+            props.load(in);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        String urlD =props.getProperty("db.url");
+        String login = props.getProperty("db.login");
+        String password = props.getProperty("db.password");
+        Class.forName("org.postgresql.Driver");
+        Connection cn = DriverManager.getConnection(urlD, login, password);
+        Statement stmt = cn.createStatement();
+
+        String totalSelect = "SELECT dog_comments.comment " +
+                "FROM dogs " +
+                "JOIN dog_comments ON dog_comments.dog_id = dogs.id " +
+                "WHERE dogs.url=?";
+        PreparedStatement select = cn.prepareStatement(totalSelect);
+
+        select.setString(1, url);
+        select.executeQuery();
+        ResultSet rs = select.executeQuery();
+        while(rs.next()){
+            comments.add(rs.getString("comment"));
+        }
+        return comments;
     }
 }

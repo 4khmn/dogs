@@ -1,4 +1,5 @@
 <%@ page contentType="text/html; charset=UTF-8" %>
+<%@ page import="java.util.ArrayList" %>
 <html>
 <head>
     <title>Random Dog</title>
@@ -9,11 +10,18 @@
 <body>
     <%
         String dogUrl = (String) request.getAttribute("dogUrl");
+        ArrayList<String> comments = (ArrayList<String>) request.getAttribute("comments");
     %>
 
     <h2>Случайная собака</h2>
     <img src= "<%= dogUrl %>" alt="Dog" width="400">
-
+        <%
+        for (var v: comments){
+        %>
+        <li><%= v %></li>
+        <%
+        }
+        %>
     <form action="/dog" method="post">
 
         <h2>Лайк</h2>
